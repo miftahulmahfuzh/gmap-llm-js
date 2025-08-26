@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Places Finder</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Places Finder</h1>
+            <p>Compare performance with and without AI query processing</p>
+        </div>
+
+        <div class="search-section">
+            <div class="search-controls">
+                <div class="toggle-section">
+                    <span id="standardLabel" class="toggle-label active" onclick="setStandardMode()">Standard Search</span>
+                    <div id="llmToggle" class="toggle-switch" onclick="toggleLLM()">
+                        <div class="toggle-slider"></div>
+                    </div>
+                    <span id="aiLabel" class="toggle-label" onclick="setAIMode()">AI Enhanced</span>
+                    <span class="toggle-description">(Compare search performance)</span>
+                </div>
+
+                <div class="search-form">
+                    <input type="text" id="searchInput" class="search-input" placeholder="What are you looking for? (e.g., best pizza in New York)" />
+                    <button id="searchBtn" class="search-btn" onclick="searchPlaces()">Search</button>
+                </div>
+
+                <div id="searchInfo" class="search-info">
+                    <div class="duration-info">Search completed in <span id="searchDuration">0</span> seconds</div>
+                    <div id="queryInfo" class="query-info" style="display: none;">
+                        <div class="query-original">Original Query: <span id="originalQuery"></span></div>
+                        <div class="query-processed">Processed Query: <span id="processedQuery"></span></div>
+                    </div>
+                </div>
+
+                <div id="loadingIndicator" class="loading" style="display: none;">
+                    Processing your request...
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsContainer" class="results-container"></div>
+
+        <div id="paginationContainer" class="pagination-container" style="display: none;">
+            <div class="pagination-info">
+                <span id="paginationInfo">Showing 1-5 of 15 results</span>
+            </div>
+            <div class="pagination-controls">
+                <button id="prevPageBtn" class="pagination-btn" onclick="changePage(-1)" disabled>Previous</button>
+                <div id="pageNumbers" class="page-numbers"></div>
+                <button id="nextPageBtn" class="pagination-btn" onclick="changePage(1)">Next</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Netlify functions endpoints
+        const API_BASE_URL = '/.netlify/functions';
+        let useLLM = false;
+        let searchStartTime = 0;
+        let currentPage = 1;
+        let currentPagination = null;
+
+        // Cache for storing results with pagination support
+        let resultsCache = {
+            standard: {}, // key: "query|topn|page", value: {data, duration, html}
+            llm: {}       // key: "query|topn|page", value: {data, duration, html}
+        };
+        let currentQuery = '';
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchPlaces();
+            }
+        });
+
+        // Clear cache when query changes
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const newQuery = e.target.value.trim().toLowerCase();
+            if (newQuery !== currentQuery) {
+                currentQuery = newQuery;
+                clearResults();
+            }
+        });
+
+        function clearResults() {
+            document.getElementById('resultsContainer').innerHTML = '';
+            document.getElementById('searchInfo').classList.remove('show');
+            document.getElementById('paginationContainer').style.display = 'none';
+            currentPage = 1;
+        }
+
+        function toggleLLM() {
+            useLLM = !useLLM;
+            updateToggleState();
+            loadCachedResultsIfAvailable();
+        }
+
+        function setStandardMode() {
+            if (useLLM) {
+                useLLM = false;
+                updateToggleState();
+                loadCachedResultsIfAvailable();
+            }
+        }
+
+        function setAIMode() {
+            if (!useLLM) {
+                useLLM = true;
+                updateToggleState();
+                loadCachedResultsIfAvailable();
+            }
+        }
+
+        function updateToggleState() {
+            const toggle = document.getElementById('llmToggle');
+            const standardLabel = document.getElementById('standardLabel');
+            const aiLabel = document.getElementById('aiLabel');
+
+            if (useLLM) {
+                toggle.classList.add('active');
+                standardLabel.classList.remove('active');
+                aiLabel.classList.add('active');
+            } else {
+                toggle.classList.remove('active');
+                standardLabel.classList.add('active');
+                aiLabel.classList.remove('active');
+            }
+        }
+
+        function loadCachedResultsIfAvailable() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            const cacheKey = `${query.toLowerCase()}|10|${currentPage}`;
+            const cache = useLLM ? resultsCache.llm : resultsCache.standard;
+
+            if (cache[cacheKey]) {
+                console.log(`Loading cached results for ${useLLM ? 'LLM' : 'standard'} search:`, cacheKey);
+                const cached = cache[cacheKey];
+
+                document.getElementById('resultsContainer').innerHTML = cached.html;
+                document.getElementById('searchDuration').textContent = cached.duration;
+                document.getElementById('searchInfo').classList.add('show');
+
+                if (cached.data.pagination) {
+                    updatePagination(cached.data.pagination);
+                }
+
+                const queryInfo = document.getElementById('queryInfo');
+                if (useLLM && cached.data.original_query && cached.data.processed_query) {
+                    document.getElementById('originalQuery').textContent = cached.data.original_query;
+                    document.getElementById('processedQuery').textContent = cached.data.processed_query;
+                    queryInfo.style.display = 'grid';
+                } else {
+                    queryInfo.style.display = 'none';
+                }
+            }
+        }
+
+        function cacheResults(query, page, data, duration, resultsHtml) {
+            const cacheKey = `${query.toLowerCase()}|10|${page}`;
+            const cache = useLLM ? resultsCache.llm : resultsCache.standard;
+
+            cache[cacheKey] = {
+                data: data,
+                duration: duration,
+                html: resultsHtml
+            };
+
+            console.log(`Cached results for ${useLLM ? 'LLM' : 'standard'} search:`, cacheKey);
+        }
+
+        async function searchPlaces(page = 1) {
+            const searchInput = document.getElementById('searchInput');
+            const searchBtn = document.getElementById('searchBtn');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const searchInfo = document.getElementById('searchInfo');
+            const queryInfo = document.getElementById('queryInfo');
+
+            const query = searchInput.value.trim();
+            const topN = 10;
+
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            currentQuery = query.toLowerCase();
+            currentPage = page;
+
+            // Check cache first
+            const cacheKey = `${query.toLowerCase()}|10|${page}`;
+            const cache = useLLM ? resultsCache.llm : resultsCache.standard;
+
+            if (cache[cacheKey]) {
+                console.log(`Using cached results for ${useLLM ? 'LLM' : 'standard'} search`);
+                loadCachedResultsIfAvailable();
+                return;
+            }
+
+            searchStartTime = performance.now();
+
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Processing...';
+            loadingIndicator.style.display = 'block';
+            resultsContainer.innerHTML = '';
+            searchInfo.classList.remove('show');
+            queryInfo.style.display = 'none';
+            document.getElementById('paginationContainer').style.display = 'none';
+
+            const endpoint = useLLM ? '/find-places-llm' : '/find-places';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        top_n: topN,
+                        page: page
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                const searchEndTime = performance.now();
+                const duration = ((searchEndTime - searchStartTime) / 1000).toFixed(2);
+
+                displayResults(data, duration);
+
+                const resultsHtml = resultsContainer.innerHTML;
+                cacheResults(query, page, data, duration, resultsHtml);
+
+                if (useLLM && data.original_query && data.processed_query) {
+                    document.getElementById('originalQuery').textContent = data.original_query;
+                    document.getElementById('processedQuery').textContent = data.processed_query;
+                    queryInfo.style.display = 'grid';
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+
+                const searchEndTime = performance.now();
+                const duration = ((searchEndTime - searchStartTime) / 1000).toFixed(2);
+
+                displayError(`Failed to fetch places: ${error.message}`, duration);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search';
+                loadingIndicator.style.display = 'none';
+            }
+        }
+
+        function displayResults(data, duration) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const searchInfo = document.getElementById('searchInfo');
+
+            document.getElementById('searchDuration').textContent = duration;
+            searchInfo.classList.add('show');
+
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+                resultsContainer.innerHTML = data.results.map((place, index) => `
+                    <div class="place-card">
+                        <div class="place-header">
+                            <div class="place-name">${escapeHtml(place.name)}</div>
+                            <div class="place-rating">
+                                <span class="rating-star">★</span>
+                                <span>${place.rating || 'No rating'}</span>
+                            </div>
+                        </div>
+                        <div class="place-content">
+                            <div class="place-address">${escapeHtml(place.address)}</div>
+                            <div class="map-container">
+                                <iframe
+                                    class="map-embed"
+                                    src="${place.maps_embed_url}"
+                                    allowfullscreen
+                                    loading="lazy">
+                                </iframe>
+                            </div>
+                            <a href="${place.maps_direction_url}" target="_blank" class="direction-link">
+                                <span>Get Directions</span>
+                                <span>→</span>
+                            </a>
+                        </div>
+                    </div>
+                `).join('');
+
+                if (data.pagination) {
+                    updatePagination(data.pagination);
+                }
+            } else if (data.status === 'ZERO_RESULTS') {
+                resultsContainer.innerHTML = `
+                    <div class="no-results">
+                        <h3>No results found</h3>
+                        <p>Try refining your search with different keywords or locations.</p>
+                    </div>
+                `;
+                document.getElementById('paginationContainer').style.display = 'none';
+            } else {
+                displayError(data.detail || 'No results found for your search.', duration);
+            }
+        }
+
+        function updatePagination(pagination) {
+            currentPagination = pagination;
+            const paginationContainer = document.getElementById('paginationContainer');
+            const paginationInfo = document.getElementById('paginationInfo');
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+            const pageNumbers = document.getElementById('pageNumbers');
+
+            if (pagination.total_results > 0) {
+                const startResult = (pagination.current_page - 1) * pagination.results_per_page + 1;
+                const endResult = Math.min(pagination.current_page * pagination.results_per_page, pagination.total_results);
+                paginationInfo.textContent = `Showing ${startResult}-${endResult} of ${pagination.total_results} results`;
+
+                prevBtn.disabled = !pagination.has_prev_page;
+                nextBtn.disabled = !pagination.has_next_page;
+
+                generatePageNumbers(pagination);
+
+                paginationContainer.style.display = 'block';
+            } else {
+                paginationContainer.style.display = 'none';
+            }
+        }
+
+        function generatePageNumbers(pagination) {
+            const pageNumbers = document.getElementById('pageNumbers');
+            const totalPages = pagination.total_pages;
+            const currentPage = pagination.current_page;
+
+            let html = '';
+
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+
+            if (endPage - startPage < 4) {
+                startPage = Math.max(1, endPage - 4);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="page-number ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+
+            pageNumbers.innerHTML = html;
+        }
+
+        function changePage(direction) {
+            if (!currentPagination) return;
+
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= currentPagination.total_pages) {
+                searchPlaces(newPage);
+            }
+        }
+
+        function goToPage(page) {
+            if (page !== currentPage) {
+                searchPlaces(page);
+            }
+        }
+
+        function displayError(message, duration) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const searchInfo = document.getElementById('searchInfo');
+
+            if (duration) {
+                document.getElementById('searchDuration').textContent = duration;
+                searchInfo.classList.add('show');
+            }
+
+            resultsContainer.innerHTML = `
+                <div class="error-message">
+                    <strong>Error:</strong> ${escapeHtml(message)}
+                </div>
+            `;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        window.addEventListener('load', function() {
+            console.log('Places Finder loaded successfully (Netlify version)');
+            console.log('Toggle between standard search and AI-enhanced search to compare performance');
+            console.log('Results are cached for instant comparison');
+        });
+    </script>
+</body>
+</html>
