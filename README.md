@@ -33,7 +33,6 @@ A web application that compares standard Google Maps search with AI-enhanced que
 **DeepSeek API**:
 1. Sign up at [DeepSeek](https://platform.deepseek.com/)
 2. Generate API key
-```
 
 ### 3. Configure API Keys
 
