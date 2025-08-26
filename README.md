@@ -5,7 +5,9 @@ A web application that compares standard Google Maps search with AI-enhanced que
 ## Architecture
 
 **Frontend**: Static HTML/CSS/JavaScript
+
 **Backend Options**:
+
 - Netlify Functions (Node.js serverless)
 - Client-side only (GitHub Pages compatible)
 
@@ -40,6 +42,7 @@ Create `.env` file:
 GOOGLE_MAPS_API_KEY=your_google_key_here
 DEEPSEEK_API_KEY=your_deepseek_key_here
 ```
+
 
 ## Deployment Options
 
