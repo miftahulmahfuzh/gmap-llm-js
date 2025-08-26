@@ -1,23 +1,19 @@
 # AI Places Finder
-
 A web application that compares standard Google Maps search with AI-enhanced query processing. Users can toggle between modes to see how LLM preprocessing affects search results quality and performance.
 
 ## Architecture
-
 **Frontend**: Static HTML/CSS/JavaScript
-
 **Backend Options**:
-
 - Netlify Functions (Node.js serverless)
 - Client-side only (GitHub Pages compatible)
 
 ## Core Features
-
 - **Dual Search Modes**: Compare standard vs AI-enhanced Google Places searches
 - **Real-time Performance Metrics**: View search duration and query processing details
 - **Result Caching**: Instant comparison between search modes
 - **Pagination**: Navigate through up to 60 results (Google API limit)
 - **Embedded Maps**: Interactive Google Maps in each result card
+- **Location-Based Sorting**: Results automatically sorted by distance from configurable anchor point with distance display
 - **Responsive Design**: Works on desktop and mobile
 
 ## Quick Start (Local Development)
