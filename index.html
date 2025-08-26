@@ -11,6 +11,7 @@
         <div class="header">
             <h1>Places Finder</h1>
             <p>Compare performance with and without AI query processing</p>
+            <p id="anchorLocation" class="anchor-info">Sorting by distance from: Loading...</p>
         </div>
 
         <div class="search-section">
@@ -151,6 +152,10 @@
                     updatePagination(cached.data.pagination);
                 }
 
+                if (cached.data.anchor_location) {
+                    document.getElementById('anchorLocation').textContent = `Sorting by distance from: ${cached.data.anchor_location}`;
+                }
+
                 const queryInfo = document.getElementById('queryInfo');
                 if (useLLM && cached.data.original_query && cached.data.processed_query) {
                     document.getElementById('originalQuery').textContent = cached.data.original_query;
@@ -244,6 +249,10 @@
                 const resultsHtml = resultsContainer.innerHTML;
                 cacheResults(query, page, data, duration, resultsHtml);
 
+                if (data.anchor_location) {
+                    document.getElementById('anchorLocation').textContent = `Sorting by distance from: ${data.anchor_location}`;
+                }
+
                 if (useLLM && data.original_query && data.processed_query) {
                     document.getElementById('originalQuery').textContent = data.original_query;
                     document.getElementById('processedQuery').textContent = data.processed_query;
@@ -276,9 +285,12 @@
                     <div class="place-card">
                         <div class="place-header">
                             <div class="place-name">${escapeHtml(place.name)}</div>
-                            <div class="place-rating">
-                                <span class="rating-star">★</span>
-                                <span>${place.rating || 'No rating'}</span>
+                            <div class="place-meta">
+                                <div class="place-rating">
+                                    <span class="rating-star">★</span>
+                                    <span>${place.rating || 'No rating'}</span>
+                                </div>
+                                ${place.distance_km !== null ? `<div class="place-distance">${place.distance_km} km</div>` : ''}
                             </div>
                         </div>
                         <div class="place-content">
@@ -406,5 +418,29 @@
             console.log('Results are cached for instant comparison');
         });
     </script>
+
+    <style>
+        .anchor-info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .place-meta {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .place-distance {
+            background: #e8f4f8;
+            color: #2196F3;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+    </style>
 </body>
 </html>

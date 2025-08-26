@@ -1,9 +1,9 @@
 [build]
   publish = "."
   functions = "netlify/functions"
-
 [build.environment]
   NODE_VERSION = "18"
+  GPS_ANCHOR = "PIK Jakarta Utara, Indonesia"
 
 # Redirect rules for SPA
 [[redirects]]
